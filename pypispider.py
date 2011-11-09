@@ -9,7 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 POSTFIX = '.tar.gz'
 
-# Very Important Packages, which will be downloaded first.
+# packages in this list will be downloaded first.
 LINKS = ['Django', 'mercurial'] 
 
 class LinkPicker(sgmllib.SGMLParser):
@@ -29,7 +29,9 @@ class LinkPicker(sgmllib.SGMLParser):
         r = urllib.urlopen(link)
         c = r.read()
         r.close()
-        c = c.replace('<br/>', '')      
+        # <br/> tag in pypi site will cause SGMLParser find only the first link, remove it here.
+        # though, <br /> will be OK, too.
+        c = c.replace('<br/>', '')
         self.feed(c)
         self.close()
         return self.links
