@@ -1,16 +1,22 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os, re, time, urllib, sgmllib, subprocess
+
+import os, re, time
+import urllib, sgmllib, subprocess
+
 from urlparse import urljoin
+from optparse import OptionParser
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 URL = 'http://pypi.python.org/simple/'
-HERE = os.path.dirname(os.path.abspath(__file__))
 POSTFIX = '.tar.gz'
-# pkgs will be here
 DEST = os.path.join(HERE, 'pypi/')
-MD5_FILE = 'pkgs.md5'
-# packages in this list will be downloaded first.
+
+FILE_INDEX = 'index.txt'
+FILE_LINKS = 'links.txt'
+FILE_MD5   = 'dists.md5'
+
 PKGS = [
          'Django', 
          'django-cpserver',
@@ -35,209 +41,136 @@ class LinkPicker(sgmllib.SGMLParser):
     def start_a(self, attributes):
         for key, value in attributes:
             if key == 'href':
-                if self.filter and not self.filter(value):
+                if self.re and not re.search(self.re, value):
                     continue
                 self.links.append(value)
     
-    def get_sub_links(self, link, filter = None):
-        self.filter = filter
-        r = urllib.urlopen(link)
-        c = r.read()
-        r.close()
-        # <br/> tag in pypi site will cause SGMLParser find only the first link, remove it here.
-        # though, <br /> will be OK, too.
-        c = c.replace('<br/>', '')
-        self.feed(c)
-        self.close()
-        return self.links
-        
-    def get_links(self, html):
-        self.links = []
-        self.feed(html)
-        self.close()
-        return self.links
-        
-
-def get_sub_links(link, filter = None):
-    if not link.endswith('/'):
-        link = link + '/'
-    print 'get_sub_links from url', link
-    return LinkPicker().get_sub_links(link, filter)
-
-def download(link):
-    print 'downloading', link
-    
-    # get filename form link
-    b = link.rindex('/')
-    e = link.index(POSTFIX)
-    filename = link[b+1:e] + POSTFIX
-    print 'file:', filename
-    
-    md5 = ''
-    if '#md5=' in link:
-        md5 = link[-32:]
-        print 'md5:', md5
-        if re.search('[0-9a-fA-F]{32}', md5):
-            f = open(os.path.join(DEST, MD5_FILE), 'a')
-            f.write('%s  %s\n' % (md5, filename))
-            f.close()
-    
-    path = os.path.join(DEST, filename)
-    if os.path.exists(path):
-        if not md5:
-            print '%s already exists, skip.(no md5 to checked)' % filename
-            return
-        # exists and has md5    
-        tmp = 'tmp.md5'
-        f = open(os.path.join(DEST, tmp), 'w')
-        f.write('%s  %s\n' % (md5, filename))
-        f.close()
-        cmd = 'md5sum -c %s' % tmp
-        try:
-            subprocess.check_call(cmd.split(), cwd = DEST)
-            # no check errors:
-            print '%s already exists, skip.(md5 checked)' % filename
-            return
-        except Exception, e:
-            print 'md5 check error:',e
-            print 'downloading of %s will continue' % path
-    # -C- 参数表示自动断点续传
-    cmd = 'curl -C- -o %s %s' % (path, link)
-    print cmd        
-    subprocess.call(cmd.split(), cwd = HERE)
-
-def main():    
-    if not os.path.exists(DEST):
-        os.makedirs(DEST)
-    
-    print 'DEST:', DEST    
-    
-    f = os.path.join(DEST, MD5_FILE)
-    if os.path.exists(f):
-        os.remove()
-        
-    print 'downloading...'
-    
-    links = get_sub_links(URL)
-    
-    with open('index.txt', 'w') as f:
-        f.writelines(links)
-        
-    f = open('links.txt', 'w')
-    
-    PKGS.extend(links)
-    for pkg in PKGS:
-        if not pkg.endswith('/'):
-            pkg = pkg + '/'
-        pkg_home = urljoin(URL, pkg)
-        sub_links = get_sub_links(pkg_home, lambda link: POSTFIX in link)
-        
-        for i in sub_links:
-            if not i.startswith('http:'):
-                i = urljoin(pkg_home, i)
-            f.write(i + '\n')
-            download(i)
-    
-    f.close()
-
-import cmd
-class Spyder(cmd.Cmd):
-    
-    def save_url(self, url):
+    def parse(self, url, re=''):
+        self.re = re
         f = urllib.urlopen(url)
         c = f.read()
         f.close()
         c = c.replace('<br/>', '')
-        finename = url.strip('/').split('/')[-1]
-        if '.' not in filename:
-            filename = filename + '.html'
-        f = open(finename, 'w')
-        f.write(c)
-        f.close()
-        print 'url %s save to %s' % (url, filename)
-        return filename
-        
-    def get_links(self, filename):
-        f = open(filename)
-        c = f.read()
-        f.close()
-        links = LinkPicker().get_links(c)
-        return links
-        
-    def save_links(self, links, filename):
-        txt = os.path.join(filename, '.txt')
-        f = open(txt, 'w')
-        f.writelines(links)
-        f.close()
-        print 'all links in %s save to %s' % (filename, txt)        
+        self.filter = filter
+        self.links = []
+        self.feed(c)
+        self.close()
+        return self.links
+
+def get_links(url, re=''):
+    return LinkPicker().parse(url, re)
+
+def index():
+    print 'get links form', URL
+    links = get_links(URL)
+    s = '\n'.join(links)
+    print s
+    with open(FILE_INDEX, 'w') as f:
+        f.write(s)
+    print 'index save to', FILE_INDEX
+
+def links():
+    path = os.path.join(os.path.join(HERE, FILE_LINKS))
+    if os.path.exists(path):
+        os.rename(path, path + '.bak')
     
-    def do_update(self):
-        f = urllib.urlopen(URL)
-        c = f.read()
-        f.close()
-        c = c.replace('<br/>', '')
-        links = LinkPicker().get_links(c)
-        f = open('index.txt', 'w')
-        f.writelines(links)
-        f.close()
-        
-    def do_links(self):
-        f = open('index.txt')
-        x = open('links.txt', 'w')
-
-        for line in f:
-            if not line.endswith('/'):
-                line = line + '/'
-            base = urlparse.join(URL, line)
-            links = LinkPicker().get_links(base)
-            for link in links:
-                if not link.startswith('http'):
-                    link = urljoin(base, link)
-                x.write(link + '/n')
-
-        x.close()
-        f.close()
-            
-    def do_download(self):
-        m = open('links.md5', 'w')
-        f = open('links.txt')
-        for line in f:
-            a = link.rindex('/')
-            b = link.index('.tar.gz')
-            filename = link[a+1:b] + '.tar.gz'
-            if '#md5=' in link:
-                md5 = link[-32:]
-                m.write('%s  %s' % (md5, filename))
-            fullname = os.join(DEST, filename)
-            
-            if os.path.exists(fullname):
-                continue
-            cmd = 'curl -C- -o %s %s' % (fullname, link)
-            print cmd        
-            subprocess.call(cmd.split(), cwd = HERE)
-
-    def do_pkgs(self):
-        links = get_links(self.index)
-        save_links(links, self.index)
-        f = open(html, 'r')
-        links = LinkPicker().get_links(f.read())
-        f.close()
-        f = open('index.txt', 'w')
-        f.writelines(links)
-        f.close()
-        print 'index.txt generated.'
-        
-    def do_links(self, index = 'index.txt'):
-        f = open(index)
-        links = open('links.txt', 'w')
-        for line in f:
-            links = LinkPicker().get_links(f.read())
-                
-    def do_EOF(self, line):
-        return True
+    f = open(FILE_LINKS, 'w')
+    PKGS.extend(f.readlines())
+    f.close()    
     
-    def postloop(self):
-        print
+    for line in PKGS:
+        if not line:
+            continue
+        line = line.strip()
+        if not line.endswith('/'):
+            line = line + '/'
+        print 'get links for', line
+        pkg_url = urljoin(URL, line)
+        links = get_links(pkg_url, re='.tar.gz')
+        for link in links:
+            if not link.startswith('http'):
+                link = urljoin(pkg_url, link)
+            print link
+            f.write(link + '\n')
+    
+    f.close()
+    print 'links save to', FILE_LINKS
 
+def get_dist(link, filename):
+    cmd = 'curl -C- -o %s %s' % (filename, link)
+    print cmd        
+    subprocess.call(cmd.split(), cwd = HERE)
+
+def download(start=''):
+    f = open(FILE_LINKS)
+    fmd5 = open(FILE_MD5, 'a')
+    links = f.readlines()
+
+    for link in links:
+        if start and start not in links:
+            continue
+        b = link.rindex('/')
+        e = link.index(POSTFIX)
+        filename = link[b+1:e] + POSTFIX
+        print 'file:', filename
+        
+        fullname = os.path.join(DEST, filename)
+        if os.path.exists(fullname):
+            print '%s exists, skip.' % fullname
+            continue
+            
+        md5 = ''
+        if '#md5=' in link:
+            md5 = link[-32:]
+            print 'md5:', md5
+            if re.search('[0-9a-fA-F]{32}', md5):
+                fmd5.write('%s  %s\n' % (md5, filename))
+
+        get_dist(link, filename)
+        
+    fmd5.close()
+    f.close()
+
+def md5check():
+    cmd = 'md5sum %s' % FILE_MD5
+    subprocess.call(cmd.split(), cwd == HERE)
+
+def main():
+    parser = OptionParser()
+    parser.add_option("-i", "--index", 
+                      action="store_true", dest="index", default=False,
+                      help="get pkg index")
+    parser.add_option("-l", "--links", 
+                      action="store_true", dest="links", default=False,
+                      help="get dist links")
+    parser.add_option("-d", "--download",
+                      action="store_true", dest="download", default=False, 
+                      help="download dists")
+    parser.add_option("-s", "--start",
+                      action="store", dest="start", default='', 
+                      help="download from this pkg")
+    parser.add_option("-c", "--check",
+                      action="store_true", dest="check", default=False, 
+                      help="md5 check for all dists")                       
+
+    (options, args) = parser.parse_args()
+    print options, args
+    
+    if options.index:
+        index()
+    elif options.links:
+        links()
+    elif options.download:
+        download(options.start)
+    elif options.check:
+        md5check()
+    else:
+        index()
+        links()
+        download(options.start)
+        md5check()
+        
+        
 if __name__ == '__main__':
-    Spyder().cmdloop()
+    main() 
+    
