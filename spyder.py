@@ -69,18 +69,32 @@ def index():
         f.write(s)
     print 'index save to', FILE_INDEX
 
-def links():
-    path = os.path.join(os.path.join(HERE, FILE_LINKS))
-    if os.path.exists(path):
-        os.rename(path, path + '.bak')
+def links(start=''):
     
-    f = open(FILE_LINKS, 'w')
+    f = open(FILE_INDEX)
     PKGS.extend(f.readlines())
-    f.close()    
+    f.close()
+    
+    if not start:
+        f = open(FILE_LINKS, 'w')
+        path = os.path.join(os.path.join(HERE, FILE_LINKS))
+        if os.path.exists(path):
+            os.rename(path, path + '.bak')
+    else:
+        f = open(FILE_LINKS, 'a')
+    
+    matched = False
     
     for line in PKGS:
         if not line:
             continue
+            
+        if start and not matched:
+            matched = start in line
+            if not matched:
+                print 'start from %s, %s skiped.' % (start, line)
+                continue
+        
         line = line.strip()
         if not line.endswith('/'):
             line = line + '/'
@@ -92,41 +106,44 @@ def links():
                 link = urljoin(pkg_url, link)
             print link
             f.write(link + '\n')
-    
+            
+    f.close()
     print 'links save to', FILE_LINKS
 
-def get_dist(link):
-    
-    b = link.rindex('/')
-    e = link.index(POSTFIX)
-    filename = link[b+1:e] + POSTFIX
-    print 'file:', filename
-    
-    fullname = os.path.join(DEST, filename)
-    if os.path.exists(fullname):
-        print '%s exists, skip.' % fullname
-        continue
-        
-    if '#md5=' in link:
-        md5 = link[-32:]
-        print 'md5:', md5
-        if re.search('[0-9a-fA-F]{32}', md5):
-            fmd5 = open(FILE_MD5, 'a')
-            fmd5.write('%s  %s\n' % (md5, filename))
-            fmd5.close()
-    cmd = 'curl -C- -o %s %s' % (filename, link)
-    print cmd        
-    subprocess.call(cmd.split(), cwd = HERE)
-
-def download(start=''):
-    for link in PKGS:
-        get_dist(link)
-    
+def download(start=''):    
     f = open(FILE_LINKS)
+    matched = False
     for link in f:
-        if start and start not in links:
+        if not link:
             continue
-        get_dist(link)
+            
+        if start and not matched:
+            matched = start in link
+            if not matched:
+                print 'start from %s, %s skiped.' % (start, link)
+                continue            
+
+        b = link.rindex('/')
+        e = link.index(POSTFIX)
+        filename = link[b+1:e] + POSTFIX
+        print 'file:', filename
+        
+        fullname = os.path.join(DEST, filename)
+        if os.path.exists(fullname):
+            print '%s exists, skip.' % fullname
+            continue
+            
+        if '#md5=' in link:
+            md5 = link[-32:]
+            print 'md5:', md5
+            if re.search('[0-9a-fA-F]{32}', md5):
+                fmd5 = open(FILE_MD5, 'a')
+                fmd5.write('%s  %s\n' % (md5, filename))
+                fmd5.close()
+        cmd = 'curl -C- -o %s %s' % (filename, link)
+        print cmd        
+        subprocess.call(cmd.split(), cwd = HERE)
+        
     f.close()
 
 def md5check():
@@ -157,17 +174,11 @@ def main():
     if options.index:
         index()
     elif options.links:
-        links()
+        links(options.start)
     elif options.download:
         download(options.start)
     elif options.check:
         md5check()
-    else:
-        index()
-        links()
-        download(options.start)
-        md5check()
-        
         
 if __name__ == '__main__':
     main() 
