@@ -163,7 +163,7 @@ def main():
                       help="download dists")
     parser.add_option("-s", "--start",
                       action="store", dest="start", default='', 
-                      help="download from this pkg")
+                      help="start from this keyword")
     parser.add_option("-c", "--check",
                       action="store_true", dest="check", default=False, 
                       help="md5 check for all dists")                       
