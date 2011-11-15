@@ -13,9 +13,9 @@ URL = 'http://pypi.python.org/simple/'
 POSTFIX = '.tar.gz'
 DEST = os.path.join(HERE, 'pypi/')
 
-FILE_INDEX = 'index.txt'
-FILE_LINKS = 'links.txt'
-FILE_MD5   = 'dists.md5'
+FILE_INDEX = os.path.join(HERE, 'index.txt')
+FILE_LINKS = os.path.join(HERE, 'links.txt')
+FILE_MD5   = os.path.join(HERE, 'dists.md5')
 
 PKGS = [
          'Django', 
@@ -77,9 +77,8 @@ def links(start=''):
     
     if not start:
         f = open(FILE_LINKS, 'w')
-        path = os.path.join(os.path.join(HERE, FILE_LINKS))
-        if os.path.exists(path):
-            os.rename(path, path + '.bak')
+        if os.path.exists(FILE_LINKS):
+            os.rename(FILE_LINKS, path + '.bak')
     else:
         f = open(FILE_LINKS, 'a')
     
