@@ -87,14 +87,12 @@ def links(start=''):
     for line in PKGS:
         if not line:
             continue
-            
+        line = line.strip()
         if start and not matched:
             matched = start in line
             if not matched:
                 print 'start from %s, %s skiped.' % (start, line)
                 continue
-        
-        line = line.strip()
         if not line.endswith('/'):
             line = line + '/'
         print 'get links for', line
