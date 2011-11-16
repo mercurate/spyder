@@ -69,6 +69,30 @@ def index():
         f.write(s)
     print 'index save to', FILE_INDEX
 
+def get_filename(link):
+    b = link.rindex('/')
+    e = link.index(POSTFIX)
+    filename = link[b+1:e] + POSTFIX
+    return filename
+
+
+def get_latest_version(links):
+    if not links:
+        return ''
+    d = {}
+    for link in links:
+        if not link:
+            continue
+        link = link.strip()
+        if not link:
+            continue
+        filename = get_filename(link)
+        d[filename] = link
+    keys = d.keys()
+    keys.sort()
+    return d[keys[-1]]
+
+
 def links(start=''):
     
     f = open(FILE_INDEX)
@@ -76,9 +100,9 @@ def links(start=''):
     f.close()
     
     if not start:
-        f = open(FILE_LINKS, 'w')
         if os.path.exists(FILE_LINKS):
-            os.rename(FILE_LINKS, path + '.bak')
+            os.rename(FILE_LINKS, FILE_LINKS + '.bak')
+        f = open(FILE_LINKS, 'w')
     else:
         f = open(FILE_LINKS, 'a')
     
@@ -98,10 +122,11 @@ def links(start=''):
         print 'get links for', line
         pkg_url = urljoin(URL, line)
         links = get_links(pkg_url, re='.tar.gz')
-        for link in links:
+        link = get_latest_version(links)
+        if link:
             if not link.startswith('http'):
                 link = urljoin(pkg_url, link)
-            print link
+            print 'latest version for %s is %s' % (line, link)
             f.write(link + '\n')
             
     f.close()
@@ -120,9 +145,7 @@ def download(start=''):
                 print 'start from %s, %s skiped.' % (start, link)
                 continue            
 
-        b = link.rindex('/')
-        e = link.index(POSTFIX)
-        filename = link[b+1:e] + POSTFIX
+        filename = get_filename(link)
         print 'file:', filename
         
         fullname = os.path.join(DEST, filename)
@@ -176,7 +199,15 @@ def main():
         download(options.start)
     elif options.check:
         md5check()
-        
+   
+
+def test():
+    f = open('links.txt')
+    links = f.readlines()
+    v = get_latest_version(links)
+    print 'latest version is', v
+    f.close()
+
 if __name__ == '__main__':
-    main() 
+    main()
     
